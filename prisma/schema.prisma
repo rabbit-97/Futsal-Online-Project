@@ -1,0 +1,65 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id         String   @id @unique
+  password   String
+  cash       Int      @default(10000)
+  creatrdAt  DateTime
+  winCount   Int
+  LooseCount Int
+
+  TeamInternal      TeamInternal[]
+  PlayerWaitingList PlayerWaitingList[]
+}
+
+model TeamInternal {
+  id       Int    @id @default(autoincrement())
+  userId   String
+  playerId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  player Player @relation(fields: [playerId], references: [playerId])
+  Team   Team[]
+}
+
+model Team {
+  id                  Int @id @default(autoincrement())
+  teamInternalId      Int
+  playerWaitingListId Int
+
+  TeamInternal      TeamInternal      @relation(fields: [teamInternalId], references: [id])
+  PlayerWaitingList PlayerWaitingList @relation(fields: [playerWaitingListId], references: [id])
+}
+
+model PlayerWaitingList {
+  id       Int    @id @default(autoincrement())
+  userId   String
+  playerId String
+  count    Int
+
+  user   User   @relation(fields: [userId], references: [id])
+  player Player @relation(fields: [playerId], references: [playerId])
+  Team   Team[]
+}
+
+model Player {
+  id                Int                 @id @default(autoincrement())
+  playerId          String              @unique
+  speed             Int
+  goalDecisiveness  Int
+  shootPower        Int
+  defense           Int
+  stamina           Int
+  tier              String
+  price             Int
+  createdAt         DateTime
+  TeamInternal      TeamInternal[]
+  PlayerWaitingList PlayerWaitingList[]
+}
