@@ -6,7 +6,6 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const router = express.Router();
-
 const prisma = new PrismaClient({
   log: ["query", "info", "warn", "error"],
   errorFormat: "pretty",
@@ -15,18 +14,37 @@ const prisma = new PrismaClient({
 // 나만의 팀 꾸리기 - 팀 생성 api
 router.post("/teams", authMiddleware, async (req, res) => {
   try {
-    const { teamInternalId, playerWaitingListId } = req.body;
+    const { playerId, playerWaitingListId } = req.body;
     const userId = req.user.id;
 
+    // 플레이어 존재 여부 확인
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+    });
+
+    if (!player) {
+      return res.status(404).json({ error: "플레이어가 존재하지 않습니다." });
+    }
+
+    // TeamInternal 레코드 생성
+    const teamInternal = await prisma.teamInternal.create({
+      data: {
+        userId,
+        playerId,
+      },
+    });
+
+    // 생성된 TeamInternal의 ID를 사용하여 Team 레코드 생성
     const team = await prisma.team.create({
       data: {
-        teamInternalId,
-        playerWaitingListId,
+        teamInternalId: teamInternal.id, // 방금 생성된 TeamInternal의 ID
+        playerWaitingListId, // 플레이어 대기실 ID
       },
     });
 
     res.status(201).json(team);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "서버 오류" });
   }
 });
@@ -91,7 +109,6 @@ router.post("/teams/:teamId/players", authMiddleware, async (req, res) => {
       data: {
         teamId: Number(teamId),
         playerId,
-        userId,
       },
     });
 
@@ -107,6 +124,7 @@ router.post("/teams/:teamId/players", authMiddleware, async (req, res) => {
 
     res.status(201).json(teamInternal);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "서버 오류" });
   }
 });
@@ -152,6 +170,7 @@ router.delete("/teams/:teamId/players/:playerId", authMiddleware, async (req, re
 
     res.status(200).json({ message: "선수가 팀에서 해제되었습니다." });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "서버 오류" });
   }
 });
