@@ -38,7 +38,7 @@ router.post("/signup", async (req, res) => {
         cash: 10000,
         creatrdAt: new Date(),
         winCount: 0,
-        LooseCount: 0,
+        looseCount: 0,
       },
     });
 

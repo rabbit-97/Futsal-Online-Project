@@ -13,7 +13,7 @@ model User {
   cash       Int      @default(10000)
   creatrdAt  DateTime
   winCount   Int
-  LooseCount Int
+  looseCount Int
 
   TeamInternal      TeamInternal[]
   PlayerWaitingList PlayerWaitingList[]

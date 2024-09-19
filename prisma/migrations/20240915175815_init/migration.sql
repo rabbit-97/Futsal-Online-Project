@@ -5,7 +5,7 @@ CREATE TABLE `User` (
     `cash` INTEGER NOT NULL DEFAULT 10000,
     `creatrdAt` DATETIME(3) NOT NULL,
     `winCount` INTEGER NOT NULL,
-    `LooseCount` INTEGER NOT NULL,
+    `looseCount` INTEGER NOT NULL,
 
     UNIQUE INDEX `User_id_key`(`id`),
     PRIMARY KEY (`id`)
