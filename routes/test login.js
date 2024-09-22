@@ -50,7 +50,7 @@ router.post("/signup", async (req, res) => {
 // 로그인 API
 router.post("/login", async (req, res) => {
   try {
-    const { id, password } = req.body; // 로그인 시 id와 password 받음
+    const { id, password } = req.body;
 
     // 사용자 이름으로 사용자 검색
     const user = await prisma.users.findUnique({
@@ -69,13 +69,11 @@ router.post("/login", async (req, res) => {
     }
 
     // JWT 토큰 발급
-    const token = jwt.sign(
-      { id: user.id, userId: user.userId }, // JWT에 사용자 정보 포함
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" }
-    );
+    const token = jwt.sign({ id: user.id, userId: user.userId }, process.env.JWT_SECRET, {
+      expiresIn: "24h",
+    });
 
-    return res.status(200).json({ token }); // 토큰 반환
+    return res.status(200).json({ token });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "서버 오류" });

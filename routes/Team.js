@@ -16,8 +16,8 @@ const prisma = new PrismaClient({
 // ** 팀 생성 api **
 router.post("/teams", authMiddleware, async (req, res) => {
   try {
-    const { playerIds, name } = req.body; // userId 제거
-    const tokenUserId = req.user.userId; // 인증된 사용자 ID
+    const { playerIds, name } = req.body;
+    const tokenUserId = req.user.userId;
 
     // 필드 유효성 검사
     if (!playerIds || playerIds.length !== 3) {
@@ -26,7 +26,7 @@ router.post("/teams", authMiddleware, async (req, res) => {
 
     // 사용자 존재 여부 확인
     const userExists = await prisma.users.findUnique({
-      where: { userId: parseInt(tokenUserId) }, // 인증된 ID 사용
+      where: { userId: parseInt(tokenUserId) },
     });
 
     if (!userExists) {
@@ -48,7 +48,7 @@ router.post("/teams", authMiddleware, async (req, res) => {
     // 새로운 팀 생성
     const newTeam = await prisma.teams.create({
       data: {
-        userId: parseInt(tokenUserId), // 인증된 사용자 ID 사용
+        userId: parseInt(tokenUserId),
         name: name || null,
         TeamInternals: {
           create: playerIds.map((playerId) => ({ playerId })),

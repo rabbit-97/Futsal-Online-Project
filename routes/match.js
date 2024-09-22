@@ -152,7 +152,7 @@ router.get("/users/status", async (req, res) => {
 
     res.status(200).json({ message: "유저 상태 조회 성공", userStatuses });
   } catch (error) {
-    console.error(error); // 에러 로그 추가
+    console.error(error);
     res.status(500).json({ error: "유저 상태 조회 중 오류가 발생했습니다." });
   }
 });
@@ -165,7 +165,7 @@ router.delete("/users/status/delete", async (req, res) => {
       .status(200)
       .json({ message: "모든 매칭 요청이 삭제되었습니다.", count: deletedRequests.count });
   } catch (error) {
-    console.error(error); // 에러 로그 추가
+    console.error(error);
     res.status(500).json({ error: "매칭 요청 삭제 중 오류가 발생했습니다." });
   }
 });
