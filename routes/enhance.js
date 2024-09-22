@@ -11,6 +11,9 @@ const prisma = new PrismaClient({
   errorFormat: "pretty",
 });
 
+// 재화는 유저의 머니를 사용해 강화 진행
+// 강화 성공시 카드의 스탯중 하나가 일정 수치만큼 올라감
+
 // 강화 API
 router.post("/enhance", authMiddleware, async (req, res) => {
   const { playerId } = req.body;

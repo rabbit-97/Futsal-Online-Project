@@ -11,6 +11,8 @@ const prisma = new PrismaClient({
   errorFormat: "pretty",
 });
 
+// 전체 유저를 조회한 다음 승리 순서대로 출력
+
 // 유저 랭킹 조회 API
 router.get("/rankings", async (req, res) => {
   try {

@@ -8,6 +8,10 @@ const prisma = new PrismaClient({
   errorFormat: "pretty",
 });
 
+// 대기열은 점수 기반 자동 매치메이킹
+// 서로 접속해있는 인원끼리만 매칭이 가능
+// 상대방이 수락을 해야만 경기 진행
+
 // 대기열 등록 API
 router.post("/match", authMiddleware, async (req, res) => {
   const { userId } = req.body;
