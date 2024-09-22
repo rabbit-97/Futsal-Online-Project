@@ -12,29 +12,24 @@ const prisma = new PrismaClient({
 });
 
 // 유저 랭킹 조회 API
-router.get("/ranking", async (req, res) => {
+router.get("/rankings", async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
-      orderBy: [
-        {
-          winCount: "desc",
-        },
-        {
-          looseCount: "asc",
-        },
-      ],
+    const rankings = await prisma.users.findMany({
       select: {
-        id: true,
-        winCount: true,
-        looseCount: true,
+        userId: true,
+        win: true,
+        draw: true,
+        lose: true,
+      },
+      orderBy: {
+        win: "desc",
       },
     });
 
-    res.status(200).json(users);
+    res.json(rankings);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "서버 오류" });
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
   }
 });
-
 export default router;

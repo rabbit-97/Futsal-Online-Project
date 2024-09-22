@@ -1,9 +1,6 @@
 import express from "express";
 import { PrismaClient } from "@prisma/client";
 import authMiddleware from "../middlewares/auth.js";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const router = express.Router();
 const prisma = new PrismaClient({
@@ -11,50 +8,211 @@ const prisma = new PrismaClient({
   errorFormat: "pretty",
 });
 
-// 게임 매치 api
-router.get("/match/:userId", async (req, res) => {
-  const userId = req.params.userId;
+// 대기열 등록 API
+router.post("/match", authMiddleware, async (req, res) => {
+  const { userId } = req.body;
+  const token = req.user.userId;
 
   try {
-    const match = await getMatch(userId);
-
-    if (match) {
-      res.status(200).json({ message: "매칭 성공", match });
-    } else {
-      res.status(200).json({ message: "매칭 중, 대기열에 추가됨" });
+    // 요청한 userId와 인증된 userId가 일치하는지 확인
+    if (userId !== token) {
+      return res.status(403).json({ message: "권한이 없습니다." });
     }
+
+    // 요청한 사용자 존재 여부 확인
+    const userExists = await prisma.users.findUnique({
+      where: { userId: token },
+    });
+
+    if (!userExists) {
+      return res.status(404).json({ message: "사용자를 찾을 수 없습니다." });
+    }
+
+    // 이미 대기열에 있는지 확인
+    const existingRequest = await prisma.matchRequest.findFirst({
+      where: { requesterUserId: userId, status: "대기중" },
+    });
+
+    if (existingRequest) {
+      return res.status(400).json({ message: "이미 대기열에 있습니다." });
+    }
+
+    // 대기열에 새로 등록
+    const newMatchRequest = await prisma.matchRequest.create({
+      data: {
+        requesterUser: {
+          connect: { userId: userId },
+        },
+        status: "대기중",
+      },
+    });
+
+    res.status(200).json({ message: "대기열에 등록되었습니다.", newMatchRequest });
   } catch (error) {
-    res.status(500).json({ message: "매칭 실패", error: error.message });
+    console.error(error);
+    res.status(500).json({ error: "대기열 등록 중 오류가 발생했습니다." });
   }
 });
 
-const getMatch = async (userId) => {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { winCount: true, looseCount: true },
-  });
+// 자동 매칭 API
+router.post("/start", authMiddleware, async (req, res) => {
+  const token = req.user.userId;
 
-  const userScore = user.winCount - user.looseCount;
-
-  const match = await prisma.matchQueue.findFirst({
-    where: {
-      userId: { not: userId },
-      score: {
-        gte: userScore - 100,
-        lte: userScore + 100,
+  try {
+    // 현재 유저 상태 확인
+    const currentUser = await prisma.matchRequest.findFirst({
+      where: {
+        requesterUserId: token,
+        status: "대기중",
       },
-    },
-    orderBy: { queuedAt: "asc" },
-  });
-
-  if (match) {
-    await prisma.matchQueue.delete({
-      where: { userId: match.userId },
+      include: { requesterUser: true },
     });
-    return match;
-  }
 
-  return null;
-};
+    if (!currentUser) {
+      return res.status(403).json({ message: "대기 중인 매칭 요청이 없습니다." });
+    }
+
+    // 대기 중인 다른 사용자들 중에서 점수 차이가 ±100 이하인 사용자 찾기
+    const potentialMatches = await prisma.matchRequest.findMany({
+      where: {
+        status: "대기중",
+        requesterUserId: { not: token },
+        requesterUser: {
+          score: {
+            gte: currentUser.requesterUser.score - 100,
+            lte: currentUser.requesterUser.score + 100,
+          },
+        },
+      },
+      include: { requesterUser: true },
+    });
+
+    if (potentialMatches.length === 0) {
+      return res.status(200).json({ message: "적합한 매칭 상대가 없습니다." });
+    }
+
+    // 첫 번째 적합한 상대 선택
+    const match = potentialMatches[0];
+
+    // 매칭 상태 업데이트: 양측을 '게임 진행중'으로 변경
+    await prisma.matchRequest.updateMany({
+      where: {
+        OR: [
+          { id: match.id }, // 요청한 유저의 매칭 요청
+          { requesterUserId: currentUser.requesterUserId }, // 현재 유저의 요청
+        ],
+      },
+      data: {
+        status: "게임 진행중",
+        opponentUserId: match.requesterUserId, // 상대방 유저의 ID 설정
+      },
+    });
+
+    // 매칭 결과 응답
+    res.status(200).json({
+      message: "매칭이 성공적으로 성사되었습니다.",
+      matches: [
+        {
+          user1: match.requesterUser,
+          user2: currentUser.requesterUser,
+        },
+      ],
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "매칭 시작 중 오류가 발생했습니다." });
+  }
+});
+// 매칭 상태 API
+router.get("/users/status", async (req, res) => {
+  try {
+    // 모든 유저의 매칭 요청 상태 조회
+    const userStatuses = await prisma.matchRequest.findMany({
+      include: {
+        requesterUser: {
+          select: {
+            userId: true,
+            nickName: true,
+            score: true,
+          },
+        },
+        opponentUser: {
+          select: {
+            userId: true,
+            nickName: true,
+            score: true,
+          },
+        },
+      },
+    });
+
+    if (userStatuses.length === 0) {
+      return res.status(404).json({ message: "매칭 요청이 없습니다." });
+    }
+
+    res.status(200).json({ message: "유저 상태 조회 성공", userStatuses });
+  } catch (error) {
+    console.error(error); // 에러 로그 추가
+    res.status(500).json({ error: "유저 상태 조회 중 오류가 발생했습니다." });
+  }
+});
+
+// 모든 매칭 요청 삭제
+router.delete("/users/status/delete", async (req, res) => {
+  try {
+    const deletedRequests = await prisma.matchRequest.deleteMany();
+    res
+      .status(200)
+      .json({ message: "모든 매칭 요청이 삭제되었습니다.", count: deletedRequests.count });
+  } catch (error) {
+    console.error(error); // 에러 로그 추가
+    res.status(500).json({ error: "매칭 요청 삭제 중 오류가 발생했습니다." });
+  }
+});
+// 매칭 상태 API
+router.get("/users/status", async (req, res) => {
+  try {
+    const userStatuses = await prisma.matchRequest.findMany({
+      include: {
+        requesterUser: {
+          select: {
+            userId: true,
+            nickName: true,
+            score: true,
+          },
+        },
+        opponentUser: {
+          select: {
+            userId: true,
+            nickName: true,
+            score: true,
+          },
+        },
+      },
+    });
+
+    if (userStatuses.length === 0) {
+      return res.status(404).json({ message: "매칭 요청이 없습니다." });
+    }
+
+    res.status(200).json({ message: "유저 상태 조회 성공", userStatuses });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "유저 상태 조회 중 오류가 발생했습니다." });
+  }
+});
+
+// 모든 매칭 요청 삭제
+router.delete("/users/status/delete", async (req, res) => {
+  try {
+    const deletedRequests = await prisma.matchRequest.deleteMany();
+    res
+      .status(200)
+      .json({ message: "모든 매칭 요청이 삭제되었습니다.", count: deletedRequests.count });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "매칭 요청 삭제 중 오류가 발생했습니다." });
+  }
+});
 
 export default router;

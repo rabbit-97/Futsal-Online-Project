@@ -7,59 +7,87 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model User {
-  id         String   @id @unique
-  password   String
-  cash       Int      @default(10000)
-  creatrdAt  DateTime
-  winCount   Int
-  looseCount Int
+// 서진님 프리즈마 카피
 
-  TeamInternal      TeamInternal[]
-  PlayerWaitingList PlayerWaitingList[]
+model Users {
+  userId                  Int     @id @default(autoincrement())
+  nickName                String  @unique
+  id                      String  @unique
+  password                String
+  win                     Int     @default(0)  
+  draw                    Int     @default(0)
+  lose                    Int     @default(0)
+  score                   Int     @default(2000)
+  money                   Int     @default(100000)
+  
+  createdAt               DateTime @ default(now())
+
+  team              Teams[]
+  playerWaitingList PlayerWaitingLists?
+
+  matchRequestsRequester matchRequest[] @relation("RequesterUser")
+  matchRequestsOpponent  matchRequest[] @relation("OpponentUser")
 }
 
-model TeamInternal {
-  id       Int    @id @default(autoincrement())
-  userId   String
-  playerId String
+model Teams {
+  teamId                  Int  @id @default(autoincrement()) @map("characterId")
+  userId                  Int  @map("userId")
+  name                    String? 
 
-  user   User   @relation(fields: [userId], references: [id])
-  player Player @relation(fields: [playerId], references: [playerId])
-  Team   Team[]
+  createdAt               DateTime @default(now())
+
+  user    Users        @relation(fields:[userId], references: [userId])
+
+  playerWaitingList   PlayerWaitingLists[]
+  TeamInternals       TeamInternals[]
+}
+model TeamInternals {
+  teamInternalId          Int  @id @default(autoincrement())
+  teamId                  Int
+  playerId                Int
+
+  createdAt               DateTime @default(now())
+
+  team    Teams    @relation(fields: [teamId], references: [teamId], onDelete: Cascade)
+  
+}
+model PlayerWaitingLists {
+  playerWaitingListId     Int   @id @default(autoincrement())
+  userId                  Int   @unique
+  teamId                  Int
+  playerId                Int
+  count                   Int
+
+  createdAt               DateTime @default(now())
+
+  user  Users          @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  team  Teams          @relation(fields: [teamId], references: [teamId], onDelete: Cascade)
 }
 
-model Team {
-  id                  Int @id @default(autoincrement())
-  teamInternalId      Int
-  playerWaitingListId Int
+model Players {
+  playerId               Int    @id @default(autoincrement())
+  name                   String
+  speed                  Int
+  goalDecisiveness       Int
+  shootPower             Int
+  defense                Int
+  stamina                Int
+  tier                   String
 
-  TeamInternal      TeamInternal      @relation(fields: [teamInternalId], references: [id])
-  PlayerWaitingList PlayerWaitingList @relation(fields: [playerWaitingListId], references: [id])
+  createdAt              DateTime @updatedAt
 }
 
-model PlayerWaitingList {
-  id       Int    @id @default(autoincrement())
-  userId   String
-  playerId String
-  count    Int
+// 추가로 매치 관련 데이터베이스 추가
 
-  user   User   @relation(fields: [userId], references: [id])
-  player Player @relation(fields: [playerId], references: [playerId])
-  Team   Team[]
-}
+model matchRequest {
+  id            Int      @id @default(autoincrement())
+  status        String   @default("대기중")
+  createdAt     DateTime @default(now())
 
-model Player {
-  id                Int                 @id @default(autoincrement())
-  playerId          String              @unique
-  speed             Int
-  goalDecisiveness  Int
-  shootPower        Int
-  defense           Int
-  stamina           Int
-  tier              String
-  price             Int
-  createdAt         DateTime
-  TeamInternal      TeamInternal[]
-  PlayerWaitingList PlayerWaitingList[]
+  requesterUser Users    @relation("RequesterUser", fields: [requesterUserId], references: [userId])
+  requesterUserId Int
+
+  opponentUser  Users?   @relation("OpponentUser", fields: [opponentUserId], references: [userId])
+  opponentUserId Int?
 }

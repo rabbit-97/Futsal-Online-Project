@@ -10,168 +10,127 @@ const prisma = new PrismaClient({
   log: ["query", "info", "warn", "error"],
   errorFormat: "pretty",
 });
+// 선수는 무조건 3명, 이하일 수 없음
+// 추가 제거 api를 변경 api로 통합
 
-// 나만의 팀 꾸리기 - 팀 생성 api
+// ** 팀 생성 api **
 router.post("/teams", authMiddleware, async (req, res) => {
   try {
-    const { playerId, playerWaitingListId } = req.body;
-    const userId = req.user.id;
+    const { playerIds, name } = req.body; // userId 제거
+    const tokenUserId = req.user.userId; // 인증된 사용자 ID
+
+    // 필드 유효성 검사
+    if (!playerIds || playerIds.length !== 3) {
+      return res.status(400).json({ error: "3명의 플레이어 ID가 필요합니다." });
+    }
+
+    // 사용자 존재 여부 확인
+    const userExists = await prisma.users.findUnique({
+      where: { userId: parseInt(tokenUserId) }, // 인증된 ID 사용
+    });
+
+    if (!userExists) {
+      return res.status(404).json({ error: "사용자가 존재하지 않습니다." });
+    }
 
     // 플레이어 존재 여부 확인
-    const player = await prisma.player.findUnique({
-      where: { id: playerId },
-    });
+    const playersExist = await Promise.all(
+      playerIds.map(async (playerId) => {
+        const player = await prisma.players.findUnique({ where: { playerId } });
+        return player !== null;
+      })
+    );
 
-    if (!player) {
-      return res.status(404).json({ error: "플레이어가 존재하지 않습니다." });
+    if (playersExist.includes(false)) {
+      return res.status(404).json({ error: "일부 플레이어가 존재하지 않습니다." });
     }
 
-    // TeamInternal 레코드 생성
-    const teamInternal = await prisma.teamInternal.create({
+    // 새로운 팀 생성
+    const newTeam = await prisma.teams.create({
       data: {
-        userId,
-        playerId,
+        userId: parseInt(tokenUserId), // 인증된 사용자 ID 사용
+        name: name || null,
+        TeamInternals: {
+          create: playerIds.map((playerId) => ({ playerId })),
+        },
       },
     });
 
-    // 생성된 TeamInternal의 ID를 사용하여 Team 레코드 생성
-    const team = await prisma.team.create({
-      data: {
-        teamInternalId: teamInternal.id, // 방금 생성된 TeamInternal의 ID
-        playerWaitingListId, // 플레이어 대기실 ID
-      },
-    });
-
-    res.status(201).json(team);
+    res.status(201).json({ message: "팀이 성공적으로 생성되었습니다.", teamId: newTeam.teamId });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "서버 오류" });
   }
 });
-
-// 나만의 팀 꾸리기 - 팀 조회 api
-router.get("/teams/:id", async (req, res) => {
+// ** 팀 조회 api **
+router.get("/teams", authMiddleware, async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const team = await prisma.team.findUnique({
-      where: { id: Number(id) },
-      include: {
-        TeamInternal: true,
-        PlayerWaitingList: true,
+    const teams = await prisma.teams.findMany({
+      select: {
+        teamId: true,
+        userId: true,
+        name: true,
+        TeamInternals: {
+          select: {
+            playerId: true,
+          },
+        },
       },
     });
 
-    if (!team) {
-      return res.status(404).json({ error: "팀이 존재하지 않아요" });
-    }
+    // 선수 정보를 추가
+    const teamWithPlayers = await Promise.all(
+      teams.map(async (team) => {
+        const players = await prisma.players.findMany({
+          where: {
+            playerId: { in: team.TeamInternals.map((internal) => internal.playerId) },
+          },
+          select: {
+            playerId: true,
+            name: true,
+          },
+        });
 
-    res.status(200).json(team);
+        return {
+          teamId: team.teamId,
+          userId: team.userId,
+          name: team.name,
+          players,
+        };
+      })
+    );
+
+    res.json(teamWithPlayers);
   } catch (error) {
-    res.status(500).json({ error: "서버 오류" });
+    console.error(error);
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
   }
 });
 
-// 나만의 팀 꾸리기 - 팀에 선수 추가 api
-router.post("/teams/:teamId/players", authMiddleware, async (req, res) => {
+// ** 팀 선수 변경 api **
+router.put("/teams/:teamId", authMiddleware, async (req, res) => {
+  const { teamId } = req.params;
+  const { playerId, newPlayerId } = req.body;
+
   try {
-    const { teamId } = req.params;
-    const { playerId } = req.body;
-    const userId = req.user.id;
-
-    // 현재 팀에 추가된 선수 수 확인
-    const currentPlayerCount = await prisma.teamInternal.count({
+    await prisma.teamInternals.deleteMany({
       where: {
-        teamId: Number(teamId),
+        playerId: playerId,
+        teamId: parseInt(teamId, 10),
       },
     });
 
-    if (currentPlayerCount >= 3) {
-      return res.status(400).json({ error: "선수는 최대 3명이 출전해야 합니다." });
-    }
-
-    // 대기 목록에서 선수를 찾기
-    const playerInWaitingList = await prisma.playerWaitingList.findUnique({
-      where: {
-        playerId_userId: {
-          playerId,
-          userId,
-        },
-      },
-    });
-
-    if (!playerInWaitingList) {
-      return res.status(404).json({ error: "선수가 대기 목록에 없습니다." });
-    }
-
-    // 팀 내부 데이터 추가
-    const teamInternal = await prisma.teamInternal.create({
+    await prisma.teamInternals.create({
       data: {
-        teamId: Number(teamId),
-        playerId,
+        teamId: parseInt(teamId, 10),
+        playerId: newPlayerId,
       },
     });
 
-    // 대기 목록에서 선수를 제거
-    await prisma.playerWaitingList.delete({
-      where: {
-        playerId_userId: {
-          playerId,
-          userId,
-        },
-      },
-    });
-
-    res.status(201).json(teamInternal);
+    res.status(200).json({ message: "선수가 성공적으로 교체되었습니다." });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "서버 오류" });
-  }
-});
-
-// 나만의 팀 꾸리기 - 팀 선수 해제 api
-router.delete("/teams/:teamId/players/:playerId", authMiddleware, async (req, res) => {
-  try {
-    const { teamId, playerId } = req.params;
-    const userId = req.user.id;
-
-    // 팀에서 선수 찾기
-    const teamInternal = await prisma.teamInternal.findUnique({
-      where: {
-        teamId_playerId: {
-          teamId: Number(teamId),
-          playerId,
-        },
-      },
-    });
-
-    if (!teamInternal) {
-      return res.status(404).json({ error: "선수가 팀에 없습니다." });
-    }
-
-    if (teamInternal.userId !== userId) {
-      return res.status(404).json({ error: "이 팀에 접근할 권한이 없습니다." });
-    }
-
-    // 팀에서 선수 제거
-    await prisma.teamInternal.delete({
-      where: {
-        id: teamInternal.id,
-      },
-    });
-
-    // 대기 목록에 선수 추가
-    await prisma.playerWaitingList.create({
-      data: {
-        userId,
-        playerId,
-      },
-    });
-
-    res.status(200).json({ message: "선수가 팀에서 해제되었습니다." });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "서버 오류" });
+    res.status(500).json({ error: "선수 교체에 실패했습니다." });
   }
 });
 

@@ -9,54 +9,52 @@ dotenv.config();
 const router = express.Router();
 const prisma = new PrismaClient();
 
-const SALT_ROUNDS = 10;
-
 // 회원가입 API
 router.post("/signup", async (req, res) => {
   try {
-    const { id, password } = req.body;
+    const { nickName, id, password } = req.body;
 
-    // 필수 입력값 확인
-    if (!id || !password) {
-      return res.status(400).json({ error: "ID와 비밀번호를 모두 입력하세요." });
+    // 필드 유효성 검사
+    if (!nickName || !id || !password) {
+      return res.status(400).json({ error: "모든 필드를 입력해야 합니다." });
     }
 
-    // 이미 사용자가 존재하는지 확인
-    const existingUser = await prisma.user.findUnique({ where: { id } });
+    // 사용자 중복 확인
+    const existingUser = await prisma.users.findUnique({
+      where: { id },
+    });
+
     if (existingUser) {
-      return res.status(400).json({ error: "이미 존재하는 사용자입니다." });
+      return res.status(409).json({ error: "이미 존재하는 사용자입니다." });
     }
 
-    // 비밀번호 해싱
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+    // 비밀번호 해시 처리
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     // 새로운 사용자 생성
-    const user = await prisma.user.create({
+    const newUser = await prisma.users.create({
       data: {
+        nickName,
         id,
         password: hashedPassword,
-        cash: 10000,
-        creatrdAt: new Date(),
-        winCount: 0,
-        looseCount: 0,
       },
     });
 
-    res.status(201).json({ message: "회원가입 성공", user });
+    return res.status(201).json({ message: "회원가입이 완료되었습니다.", userId: newUser.userId });
   } catch (error) {
-    console.error("회원가입 API 오류:", error);
-    res.status(500).json({ error: "서버 오류" });
+    console.error(error);
+    return res.status(500).json({ error: "서버 오류" });
   }
 });
 
 // 로그인 API
 router.post("/login", async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { id, password } = req.body; // 로그인 시 id와 password 받음
 
     // 사용자 이름으로 사용자 검색
-    const user = await prisma.user.findUnique({
-      where: { id: username }, // 사용자 이름을 ID로 사용
+    const user = await prisma.users.findUnique({
+      where: { id },
     });
 
     if (!user) {
@@ -72,15 +70,15 @@ router.post("/login", async (req, res) => {
 
     // JWT 토큰 발급
     const token = jwt.sign(
-      { id: user.id },
-      process.env.JWT_SECRET, // .env 파일에서 JWT_SECRET 값 가져오기
-      { expiresIn: "24h" } // 토큰 만료 시간 설정
+      { id: user.id, userId: user.userId }, // JWT에 사용자 정보 포함
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" }
     );
 
-    res.status(200).json({ token }); // 토큰을 클라이언트에 반환
+    return res.status(200).json({ token }); // 토큰 반환
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "서버 오류" });
+    return res.status(500).json({ error: "서버 오류" });
   }
 });
 
