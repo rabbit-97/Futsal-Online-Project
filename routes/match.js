@@ -97,14 +97,11 @@ router.post("/start", authMiddleware, async (req, res) => {
     // 매칭 상태 업데이트: 양측을 '게임 진행중'으로 변경
     await prisma.matchRequest.updateMany({
       where: {
-        OR: [
-          { id: match.id }, // 요청한 유저의 매칭 요청
-          { requesterUserId: currentUser.requesterUserId }, // 현재 유저의 요청
-        ],
+        OR: [{ id: match.id }, { requesterUserId: currentUser.requesterUserId }],
       },
       data: {
         status: "게임 진행중",
-        opponentUserId: match.requesterUserId, // 상대방 유저의 ID 설정
+        opponentUserId: match.requesterUserId,
       },
     });
 
@@ -126,7 +123,6 @@ router.post("/start", authMiddleware, async (req, res) => {
 // 매칭 상태 API
 router.get("/users/status", async (req, res) => {
   try {
-    // 모든 유저의 매칭 요청 상태 조회
     const userStatuses = await prisma.matchRequest.findMany({
       include: {
         requesterUser: {
