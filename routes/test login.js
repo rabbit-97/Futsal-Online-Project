@@ -1,13 +1,12 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../prismaClient.js";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // 회원가입 API
 router.post("/signup", async (req, res) => {

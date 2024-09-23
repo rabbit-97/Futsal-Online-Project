@@ -1,15 +1,11 @@
 import express from "express";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../prismaClient.js";
 import authMiddleware from "../middlewares/auth.js";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const router = express.Router();
-const prisma = new PrismaClient({
-  log: ["query", "info", "warn", "error"],
-  errorFormat: "pretty",
-});
 
 // 선수 추가 API
 router.post("/players", authMiddleware, async (req, res) => {
