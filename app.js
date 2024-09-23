@@ -7,6 +7,7 @@ import loginRouter from "./routes/test login.js";
 import rankRouter from "./routes/rank.js";
 import matchRouter from "./routes/match.js";
 import enhanceRouter from "./routes/enhance.js";
+import gatchaRouter from "./routes/test gatcha.js";
 import { initWebSocketServer } from "./websocketServer.js";
 
 dotenv.config();
@@ -23,7 +24,15 @@ const io = initWebSocketServer(server);
 
 app.use(express.json());
 
-app.use("/api", [teamRouter, loginRouter, rankRouter, matchRouter, playerRouter, enhanceRouter]);
+app.use("/api", [
+  teamRouter,
+  loginRouter,
+  rankRouter,
+  matchRouter,
+  playerRouter,
+  enhanceRouter,
+  gatchaRouter,
+]);
 
 server.listen(PORT, () => {
   console.log(`${PORT} 포트로 서버가 열렸어요!!`);
