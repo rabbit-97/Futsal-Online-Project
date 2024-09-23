@@ -33,23 +33,26 @@ router.post("/teams", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "사용자가 존재하지 않습니다." });
     }
 
-    // 플레이어 존재 여부 확인
-    // 플레이어의 정보를 데이터베이스에서 확인하는데 없으면 오류 반환
-    // 팀 배열 안에 각 팀의 함수를 호출해 비동기 작업으로 처리하고 그 결과 프로미스를 반환
-    // 이 작업이 끝나야 다음 로직 진행
-    const playersExist = await Promise.all(
-      playerIds.map(async (playerId) => {
-        const player = await prisma.players.findUnique({ where: { playerId } });
-        return player !== null;
-      })
-    );
+    // 유저가 소유한 플레이어들만 조회
+    // playerWaitingLists에서 해당 유저가 소유한 playerId 목록을 가져옴
+    const ownedPlayers = await prisma.playerWaitingLists.findMany({
+      where: { userId: parseInt(tokenUserId) },
+      select: { playerId: true },
+    });
 
-    if (playersExist.includes(false)) {
-      return res.status(404).json({ error: "일부 플레이어가 존재하지 않습니다." });
+    // 유저가 소유한 플레이어 ID 목록 생성
+    const ownedPlayerIds = ownedPlayers.map((player) => player.playerId);
+
+    // 요청된 playerIds가 유저 소유의 플레이어인지 확인
+    // every를 사용하여 요청된 모든 playerId가 유저 소유 플레이어인지 검사
+    const isValidTeam = playerIds.every((playerId) => ownedPlayerIds.includes(playerId));
+
+    if (!isValidTeam) {
+      return res.status(403).json({ error: "소유하지 않은 플레이어는 팀에 포함할 수 없습니다." });
     }
 
     // 새로운 팀 생성
-    // 위에 과정을 다 거치면 새로운 팀을 생성, 요청쪽에 입력한 선수 데이터들을 팀 인터널즈에 추가
+    // 유저가 소유한 플레이어만 추가
     const newTeam = await prisma.teams.create({
       data: {
         userId: parseInt(tokenUserId),
@@ -121,15 +124,41 @@ router.get("/teams", authMiddleware, async (req, res) => {
 router.put("/teams/:teamId", authMiddleware, async (req, res) => {
   const { teamId } = req.params;
   const { playerId, newPlayerId } = req.body;
-  // deleteMany로 기존 팀 선수 삭제
+
   try {
+    // 팀 구성원 확인
+    const teamMembers = await prisma.teamInternals.findMany({
+      where: { teamId: parseInt(teamId, 10) },
+    });
+
+    // 팀원 수가 3명인지 확인
+    if (teamMembers.length !== 3) {
+      return res.status(400).json({ error: "팀은 반드시 3명의 선수로 구성되어야 합니다." });
+    }
+
+    // 현재 플레이어의 소유 여부 확인
+    const userId = req.user.userId;
+
+    const ownedPlayers = await prisma.playerWaitingLists.findMany({
+      where: { userId: parseInt(userId) },
+      select: { playerId: true },
+    });
+
+    const ownedPlayerIds = ownedPlayers.map((player) => player.playerId);
+
+    if (!ownedPlayerIds.includes(playerId) || !ownedPlayerIds.includes(newPlayerId)) {
+      return res.status(403).json({ error: "소유하지 않은 선수는 교체할 수 없습니다." });
+    }
+
+    // 기존 팀 선수 삭제
     await prisma.teamInternals.deleteMany({
       where: {
         playerId: playerId,
         teamId: parseInt(teamId, 10),
       },
     });
-    // 삭제 후 create로 새로운 선수 데이터 추가
+
+    // 새로운 선수 데이터 추가
     await prisma.teamInternals.create({
       data: {
         teamId: parseInt(teamId, 10),
